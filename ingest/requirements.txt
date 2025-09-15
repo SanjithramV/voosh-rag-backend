@@ -1,0 +1,9 @@
+# Python requirements for ingestion
+# Install with: pip install -r ingest/requirements.txt
+requests
+beautifulsoup4
+python-dotenv
+tqdm
+sentence-transformers
+qdrant-client
+numpy
