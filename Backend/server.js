@@ -114,7 +114,7 @@ async function retrieveFromVectorDB(query, topK = 4) {
 
 async function callLLM(prompt) {
   const key = process.env.GEMINI_API_KEY;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${key}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${key}`;
 
   try {
     const res = await axios.post(
