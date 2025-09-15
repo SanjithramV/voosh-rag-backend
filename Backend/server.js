@@ -4,6 +4,7 @@ const cors = require("cors");
 const Redis = require("ioredis");
 const { v4: uuidv4 } = require("uuid");
 const axios = require("axios");
+const { QdrantClient } = require("@qdrant/js-client-rest");
 require("dotenv").config();
 
 const PORT = process.env.PORT || 4000;
@@ -21,12 +22,15 @@ const redis = new Redis(redisUrl, {
   tls: redisUrl.startsWith("rediss://") ? {} : undefined,
 });
 
-redis.on("connect", () => {
-  console.log("✅ Redis connected successfully");
+redis.on("connect", () => console.log("✅ Redis connected successfully"));
+redis.on("error", (err) => console.error("❌ Redis connection error:", err));
+
+// --- Qdrant connection ---
+const qdrant = new QdrantClient({
+  url: process.env.QDRANT_URL,
+  apiKey: process.env.QDRANT_API_KEY,
 });
-redis.on("error", (err) => {
-  console.error("❌ Redis connection error:", err);
-});
+const QDRANT_COLLECTION = process.env.QDRANT_COLLECTION || "news_articles";
 
 // --- Express setup ---
 const app = express();
@@ -59,18 +63,16 @@ app.post("/session/new", async (req, res) => {
 });
 
 app.get("/session/:id/history", async (req, res) => {
-  const sessionId = req.params.id;
-  const history = await getHistory(sessionId);
-  res.json({ sessionId, history });
+  const history = await getHistory(req.params.id);
+  res.json({ sessionId: req.params.id, history });
 });
 
 app.post("/session/:id/reset", async (req, res) => {
-  const sessionId = req.params.id;
-  await resetHistory(sessionId);
+  await resetHistory(req.params.id);
   res.json({ ok: true });
 });
 
-// --- Create embedding using Jina ---
+// --- Jina embeddings ---
 async function createEmbeddingJina(text) {
   try {
     const JINA_KEY = process.env.JINA_API_KEY;
@@ -78,10 +80,7 @@ async function createEmbeddingJina(text) {
 
     const response = await axios.post(
       "https://api.jina.ai/v1/embeddings",
-      {
-        model: "jina-embeddings-v2-base-en",
-        input: text,
-      },
+      { model: "jina-embeddings-v3", input: text },
       {
         headers: {
           Authorization: `Bearer ${JINA_KEY}`,
@@ -103,30 +102,24 @@ async function retrieveFromVectorDB(query, topK = 4) {
     const vector = await createEmbeddingJina(query);
     if (!vector) return [];
 
-    const qdrantUrl = process.env.QDRANT_URL || "http://localhost:6333";
-    const collection = process.env.QDRANT_COLLECTION || "news_articles";
+    const results = await qdrant.search(QDRANT_COLLECTION, {
+      vector,
+      limit: topK,
+    });
 
-    const searchRes = await axios.post(
-      `${qdrantUrl}/collections/${collection}/points/search`,
-      { vector, limit: topK }
-    );
-
-    if (searchRes.data && searchRes.data.result) {
-      return searchRes.data.result.map((r) => ({
-        score: r.score,
-        text: r.payload.text,
-        title: r.payload.title,
-        url: r.payload.url,
-      }));
-    }
-    return [];
+    return results.map((r) => ({
+      score: r.score,
+      text: r.payload?.text,
+      title: r.payload?.title,
+      url: r.payload?.url,
+    }));
   } catch (err) {
     console.error("❌ Error retrieving from Qdrant:", err.response?.data || err.message);
     return [];
   }
 }
 
-// --- Call Gemini for answer generation ---
+// --- Gemini API for response ---
 async function callLLM(prompt) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return "❌ GEMINI_API_KEY not set in backend env";
@@ -141,11 +134,8 @@ async function callLLM(prompt) {
     );
     return res.data.candidates?.[0]?.content?.parts?.[0]?.text || "No reply";
   } catch (err) {
-    if (err.response?.status === 429) {
-      return "🚦 Rate limit reached. Please wait a bit before trying again.";
-    } else if (err.response?.status === 503) {
-      return "⚠️ Gemini API overloaded. Please retry later.";
-    }
+    if (err.response?.status === 429) return "🚦 Rate limit reached. Please wait.";
+    if (err.response?.status === 503) return "⚠️ Gemini API overloaded. Please retry later.";
     return "❌ Error calling Gemini: " + (err.response?.data?.error?.message || err.message);
   }
 }
@@ -166,10 +156,9 @@ app.post("/chat", async (req, res) => {
     // 2. Build prompt
     let contextText = passages.map((p, i) => `Passage ${i + 1}: ${p.text || p}`).join("\n---\n");
     if (!contextText)
-      contextText = "[NO RETRIEVED PASSAGES - run ingest script to populate vector DB]";
+      contextText = "[NO RETRIEVED PASSAGES - run ingest script to populate Qdrant Cloud]";
 
-    const prompt = `Answer the question using the context below. 
-If answer is not present, say you don't know and explain why.\n\nCONTEXT:\n${contextText}\n\nQUESTION:\n${message}`;
+    const prompt = `Answer using the context below. If unknown, say "I don't know".\n\nCONTEXT:\n${contextText}\n\nQUESTION:\n${message}`;
 
     // 3. Call Gemini
     const reply = await callLLM(prompt);
