@@ -4,12 +4,32 @@ const cors = require('cors');
 const Redis = require('ioredis');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
-
 require('dotenv').config();
 
 const PORT = process.env.PORT || 4000;
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
+// --- Redis connection ---
+const redisUrl = process.env.REDIS_URL;
+if (!redisUrl) {
+  console.error("❌ No REDIS_URL set in environment variables");
+  process.exit(1);
+}
+
+console.log("🔗 Connecting to Redis at:", redisUrl);
+
+const redis = new Redis(redisUrl, {
+  // Enable TLS if using rediss://
+  tls: redisUrl.startsWith("rediss://") ? {} : undefined,
+});
+
+redis.on("connect", () => {
+  console.log("✅ Redis connected successfully");
+});
+redis.on("error", (err) => {
+  console.error("❌ Redis connection error:", err);
+});
+
+// --- Express setup ---
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
@@ -20,11 +40,13 @@ async function appendMessage(sessionId, role, text) {
   await redis.rpush(key, JSON.stringify({ role, text, ts: Date.now() }));
   await redis.expire(key, 60 * 60 * 24 * 7); // 7 days
 }
+
 async function getHistory(sessionId) {
   const key = `sess:${sessionId}:history`;
   const list = await redis.lrange(key, 0, -1);
   return list.map(s => JSON.parse(s));
 }
+
 async function resetHistory(sessionId) {
   const key = `sess:${sessionId}:history`;
   await redis.del(key);
@@ -111,8 +133,6 @@ async function callLLM(prompt) {
   }
 }
 
-
-
 // --- Main chat endpoint ---
 app.post('/chat', async (req, res) => {
   try {
@@ -144,5 +164,5 @@ app.post('/chat', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Voosh RAG backend listening on ${PORT}`);
+  console.log(`🚀 Voosh RAG backend listening on ${PORT}`);
 });
