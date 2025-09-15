@@ -1,5 +1,6 @@
 # Python requirements for ingestion
 # Install with: pip install -r ingest/requirements.txt
+feedparser
 requests
 beautifulsoup4
 python-dotenv
