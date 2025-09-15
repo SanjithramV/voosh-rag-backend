@@ -1,10 +1,10 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const Redis = require('ioredis');
-const { v4: uuidv4 } = require('uuid');
-const axios = require('axios');
-require('dotenv').config();
+const express = require("express");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const Redis = require("ioredis");
+const { v4: uuidv4 } = require("uuid");
+const axios = require("axios");
+require("dotenv").config();
 
 const PORT = process.env.PORT || 4000;
 
@@ -18,7 +18,6 @@ if (!redisUrl) {
 console.log("🔗 Connecting to Redis at:", redisUrl);
 
 const redis = new Redis(redisUrl, {
-  // Enable TLS if using rediss://
   tls: redisUrl.startsWith("rediss://") ? {} : undefined,
 });
 
@@ -44,7 +43,7 @@ async function appendMessage(sessionId, role, text) {
 async function getHistory(sessionId) {
   const key = `sess:${sessionId}:history`;
   const list = await redis.lrange(key, 0, -1);
-  return list.map(s => JSON.parse(s));
+  return list.map((s) => JSON.parse(s));
 }
 
 async function resetHistory(sessionId) {
@@ -53,42 +52,57 @@ async function resetHistory(sessionId) {
 }
 
 // --- Session routes ---
-app.post('/session/new', async (req, res) => {
+app.post("/session/new", async (req, res) => {
   const sessionId = uuidv4();
-  await appendMessage(sessionId, 'system', 'New session created');
+  await appendMessage(sessionId, "system", "New session created");
   res.json({ sessionId });
 });
 
-app.get('/session/:id/history', async (req, res) => {
+app.get("/session/:id/history", async (req, res) => {
   const sessionId = req.params.id;
   const history = await getHistory(sessionId);
   res.json({ sessionId, history });
 });
 
-app.post('/session/:id/reset', async (req, res) => {
+app.post("/session/:id/reset", async (req, res) => {
   const sessionId = req.params.id;
   await resetHistory(sessionId);
   res.json({ ok: true });
 });
 
-// --- Vector retriever (Qdrant + Gemini embeddings) ---
-async function retrieveFromVectorDB(query, topK = 4) {
+// --- Create embedding using Jina ---
+async function createEmbeddingJina(text) {
   try {
-    const GEMINI_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_KEY) {
-      return [{ text: "No GEMINI_API_KEY set. Please add it in backend/.env" }];
-    }
+    const JINA_KEY = process.env.JINA_API_KEY;
+    if (!JINA_KEY) throw new Error("JINA_API_KEY not set");
 
-    // 1. Create embedding using Gemini
-    const embeddingRes = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent?key=${GEMINI_KEY}`,
-      { content: { parts: [{ text: query }] } },
-      { headers: { "Content-Type": "application/json" } }
+    const response = await axios.post(
+      "https://api.jina.ai/v1/embeddings",
+      {
+        model: "jina-embeddings-v2-base-en",
+        input: text,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${JINA_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
     );
 
-    const vector = embeddingRes.data.embedding.values;
+    return response.data.data[0].embedding;
+  } catch (err) {
+    console.error("❌ Error calling Jina embeddings:", err.response?.data || err.message);
+    return null;
+  }
+}
 
-    // 2. Search in Qdrant
+// --- Vector retriever (Qdrant + Jina embeddings) ---
+async function retrieveFromVectorDB(query, topK = 4) {
+  try {
+    const vector = await createEmbeddingJina(query);
+    if (!vector) return [];
+
     const qdrantUrl = process.env.QDRANT_URL || "http://localhost:6333";
     const collection = process.env.QDRANT_COLLECTION || "news_articles";
 
@@ -98,7 +112,7 @@ async function retrieveFromVectorDB(query, topK = 4) {
     );
 
     if (searchRes.data && searchRes.data.result) {
-      return searchRes.data.result.map(r => ({
+      return searchRes.data.result.map((r) => ({
         score: r.score,
         text: r.payload.text,
         title: r.payload.title,
@@ -107,13 +121,16 @@ async function retrieveFromVectorDB(query, topK = 4) {
     }
     return [];
   } catch (err) {
-    console.error("Error retrieving from Qdrant:", err.response?.data || err.message);
+    console.error("❌ Error retrieving from Qdrant:", err.response?.data || err.message);
     return [];
   }
 }
 
+// --- Call Gemini for answer generation ---
 async function callLLM(prompt) {
   const key = process.env.GEMINI_API_KEY;
+  if (!key) return "❌ GEMINI_API_KEY not set in backend env";
+
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${key}`;
 
   try {
@@ -134,31 +151,34 @@ async function callLLM(prompt) {
 }
 
 // --- Main chat endpoint ---
-app.post('/chat', async (req, res) => {
+app.post("/chat", async (req, res) => {
   try {
     const { sessionId, message } = req.body;
-    if (!sessionId || !message) return res.status(400).json({ error: 'sessionId and message required' });
+    if (!sessionId || !message)
+      return res.status(400).json({ error: "sessionId and message required" });
 
-    await appendMessage(sessionId, 'user', message);
+    await appendMessage(sessionId, "user", message);
 
     // 1. Retrieve passages
-    const topK = parseInt(process.env.TOP_K || '4');
+    const topK = parseInt(process.env.TOP_K || "4");
     const passages = await retrieveFromVectorDB(message, topK);
 
     // 2. Build prompt
-    let contextText = passages.map((p, i) => `Passage ${i+1}: ${p.text || p}`).join('\n---\n');
-    if (!contextText) contextText = '[NO RETRIEVED PASSAGES - run ingest script to populate vector DB]';
+    let contextText = passages.map((p, i) => `Passage ${i + 1}: ${p.text || p}`).join("\n---\n");
+    if (!contextText)
+      contextText = "[NO RETRIEVED PASSAGES - run ingest script to populate vector DB]";
 
-    const prompt = `Answer the question using the context below. If answer is not present, say you don't know and explain why.\n\nCONTEXT:\n${contextText}\n\nQUESTION:\n${message}`;
+    const prompt = `Answer the question using the context below. 
+If answer is not present, say you don't know and explain why.\n\nCONTEXT:\n${contextText}\n\nQUESTION:\n${message}`;
 
     // 3. Call Gemini
     const reply = await callLLM(prompt);
 
     // 4. Save + return
-    await appendMessage(sessionId, 'assistant', reply);
+    await appendMessage(sessionId, "assistant", reply);
     res.json({ reply, context: passages });
   } catch (err) {
-    console.error(err);
+    console.error("❌ /chat error:", err);
     res.status(500).json({ error: String(err) });
   }
 });
