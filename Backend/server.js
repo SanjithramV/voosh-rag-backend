@@ -15,13 +15,11 @@ if (!redisUrl) {
   console.error("❌ No REDIS_URL set in environment variables");
   process.exit(1);
 }
-
 console.log("🔗 Connecting to Redis at:", redisUrl);
 
 const redis = new Redis(redisUrl, {
   tls: redisUrl.startsWith("rediss://") ? {} : undefined,
 });
-
 redis.on("connect", () => console.log("✅ Redis connected successfully"));
 redis.on("error", (err) => console.error("❌ Redis connection error:", err));
 
@@ -43,13 +41,11 @@ async function appendMessage(sessionId, role, text) {
   await redis.rpush(key, JSON.stringify({ role, text, ts: Date.now() }));
   await redis.expire(key, 60 * 60 * 24 * 7); // 7 days
 }
-
 async function getHistory(sessionId) {
   const key = `sess:${sessionId}:history`;
   const list = await redis.lrange(key, 0, -1);
   return list.map((s) => JSON.parse(s));
 }
-
 async function resetHistory(sessionId) {
   const key = `sess:${sessionId}:history`;
   await redis.del(key);
@@ -61,12 +57,10 @@ app.post("/session/new", async (req, res) => {
   await appendMessage(sessionId, "system", "New session created");
   res.json({ sessionId });
 });
-
 app.get("/session/:id/history", async (req, res) => {
   const history = await getHistory(req.params.id);
   res.json({ sessionId: req.params.id, history });
 });
-
 app.post("/session/:id/reset", async (req, res) => {
   await resetHistory(req.params.id);
   res.json({ ok: true });
@@ -88,7 +82,6 @@ async function createEmbeddingJina(text) {
         },
       }
     );
-
     return response.data.data[0].embedding;
   } catch (err) {
     console.error("❌ Error calling Jina embeddings:", err.response?.data || err.message);
@@ -118,6 +111,53 @@ async function retrieveFromVectorDB(query, topK = 4) {
     return [];
   }
 }
+
+// --- System prompt for Gemini ---
+const SYSTEM_PROMPT = `
+You are **Voosh AI Assistant**, a Retrieval-Augmented Generation (RAG) bot.
+
+Your primary goal is to help users interact with news data that has been ingested into Qdrant.
+You combine retrieved passages with reasoning to give clear, actionable answers.
+
+---
+
+### Capabilities
+- 📰 Summarize one or more news articles in plain language.
+- 🔢 Count or list the number of stories found in the retrieved context.
+- 📌 Provide key facts: who, what, when, where, why, and how.
+- 📖 Explain the background or significance of an event.
+- 💬 Answer direct questions using only the retrieved passages.
+- 🧹 Start a new session or reset an existing one on request.
+- ❌ If a question cannot be answered with the data, politely say:
+  “I don’t know — this isn’t covered in the retrieved information.”
+
+---
+
+### Style Guidelines
+- Respond **clearly and concisely**.
+- Prefer bullet points for lists.
+- If context is missing, tell the user that no passages were found and remind them that data may need to be ingested.
+- Never invent facts not supported by the retrieved context.
+- When the user asks “what can you do”, always list the abilities above.
+
+---
+
+### Example Interactions
+**User:** “Summarize today’s stories.”  
+**Assistant:** “Here’s a quick summary of the retrieved news…”
+
+**User:** “How many stories are there?”  
+**Assistant:** “There are 4 stories in the current dataset.”
+
+**User:** “What can you do?”  
+**Assistant:** “I can summarize articles, count stories, explain context, answer questions, or tell you if I don’t know.”
+
+**User:** “Who won the football match?” (no data about sports)  
+**Assistant:** “I don’t know — the retrieved news doesn’t mention football results.”
+
+---
+`;
+
 
 // --- Gemini API for response ---
 async function callLLM(prompt) {
@@ -153,15 +193,15 @@ app.post("/chat", async (req, res) => {
     const topK = parseInt(process.env.TOP_K || "4");
     const passages = await retrieveFromVectorDB(message, topK);
 
-    // 2. Build prompt
+    // 2. Build prompt with system instructions
     let contextText = passages.map((p, i) => `Passage ${i + 1}: ${p.text || p}`).join("\n---\n");
     if (!contextText)
       contextText = "[NO RETRIEVED PASSAGES - run ingest script to populate Qdrant Cloud]";
 
-    const prompt = `Answer using the context below. If unknown, say "I don't know".\n\nCONTEXT:\n${contextText}\n\nQUESTION:\n${message}`;
+    const fullPrompt = `${SYSTEM_PROMPT}\n\nContext:\n${contextText}\n\nUser question:\n${message}`;
 
     // 3. Call Gemini
-    const reply = await callLLM(prompt);
+    const reply = await callLLM(fullPrompt);
 
     // 4. Save + return
     await appendMessage(sessionId, "assistant", reply);
@@ -172,6 +212,4 @@ app.post("/chat", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Voosh RAG backend listening on ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Voosh RAG backend listening on ${PORT}`));
