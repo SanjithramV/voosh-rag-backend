@@ -3,8 +3,6 @@ RAG-Powered News Chatbot – Backend
 This is the backend service for the Voosh Full Stack Developer assignment.
 It powers a Retrieval-Augmented Generation (RAG) chatbot that answers questions over a news corpus.
 
-✅ Assignment Mapping
-Requirement (from PDF)	Implementation
 RAG Pipeline: Retrieve top-k passages, call Gemini	Vector embeddings stored in Qdrant, retrieved by query, LLM call to Gemini/OpenAI
 Backend: Node.js (Express) REST API	Implemented in server.js
 Session Storage: In-memory DB (Redis)	Redis stores per-session chat history, TTL configurable
