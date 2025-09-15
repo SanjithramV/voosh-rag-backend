@@ -7,10 +7,11 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct, VectorParams
 from dotenv import load_dotenv
 
-# Load env vars
+# Load environment variables
 load_dotenv()
 
-QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+QDRANT_URL = os.getenv("QDRANT_URL")  # e.g. https://xxxxxx.cloud.qdrant.io
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")  # from Qdrant Cloud
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "news_articles")
 JINA_API_KEY = os.getenv("JINA_API_KEY")
 
@@ -77,12 +78,17 @@ def main():
     texts = [a["text"][:1000] for a in articles]
     embeddings = embed_texts(texts)
 
-    client = QdrantClient(url=QDRANT_URL)
+    # ✅ Connect to Qdrant (remote or local, depending on .env)
+    client = QdrantClient(
+        url=QDRANT_URL,
+        api_key=QDRANT_API_KEY,  # required for Qdrant Cloud
+    )
 
     # Create/recreate collection
+    dim = len(embeddings[0])
     client.recreate_collection(
         collection_name=QDRANT_COLLECTION,
-        vectors_config=VectorParams(size=len(embeddings[0]), distance="Cosine")
+        vectors_config=VectorParams(size=dim, distance="Cosine")
     )
 
     points = []
