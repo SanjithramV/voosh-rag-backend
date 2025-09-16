@@ -17,10 +17,43 @@ JINA_API_KEY = os.getenv("JINA_API_KEY")
 
 # RSS Feeds
 FEEDS = [
+    # 🌍 World & General News
     "http://feeds.reuters.com/reuters/topNews",
     "https://www.theguardian.com/world/rss",
     "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
     "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "https://www.aljazeera.com/xml/rss/all.xml",
+    "https://www.npr.org/rss/rss.php?id=1004",   # NPR World
+    "https://apnews.com/apf-topnews?format=rss", # Associated Press Top
+    "https://www.economist.com/international/rss.xml",
+
+    # 📰 Business & Economy
+    "http://feeds.reuters.com/reuters/businessNews",
+    "https://feeds.bbci.co.uk/news/business/rss.xml",
+    "https://www.cnbc.com/id/10001147/device/rss/rss.html",
+    "https://www.ft.com/?format=rss",  # Financial Times (general)
+
+    # 💻 Technology
+    "http://feeds.arstechnica.com/arstechnica/index",
+    "https://www.wired.com/feed/rss",
+    "https://www.theverge.com/rss/index.xml",
+    "https://feeds.feedburner.com/TechCrunch/",
+    "https://www.engadget.com/rss.xml",
+
+    # 🌱 Science & Environment
+    "https://www.scientificamerican.com/feed/rss/",
+    "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml",
+    "https://www.nature.com/subjects/science.rss",
+    "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
+
+    # 🏛️ Politics
+    "https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml",
+    "https://feeds.bbci.co.uk/news/politics/rss.xml",
+    "https://www.politico.com/rss/politics08.xml",
+    
+    # 🏟️ Sports (optional, if you want variety)
+    "https://www.espn.com/espn/rss/news",
+    "https://feeds.bbci.co.uk/sport/rss.xml?edition=uk",
 ]
 
 def collect_articles(max_count=50):
@@ -104,3 +137,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
