@@ -213,6 +213,7 @@ async function callLLM(prompt) {
 }
 
 // --- Main chat endpoint ---
+// --- Main chat endpoint ---
 app.post("/chat", async (req, res) => {
   try {
     const { sessionId, message } = req.body;
@@ -220,22 +221,39 @@ app.post("/chat", async (req, res) => {
       return res.status(400).json({ error: "Missing sessionId or message" });
     }
 
-    // Store user message in Redis
-    await redisClient.rpush(`session:${sessionId}:history`, JSON.stringify({ role: "user", text: message }));
+    // 1️⃣ Store user message in Redis
+    await appendMessage(sessionId, "user", message);
 
-    // 1. Retrieve relevant docs from Qdrant
-    const searchResults = await retrieveFromVectorDB(message);
+    // 2️⃣ Retrieve relevant docs from Qdrant
+    const passages = await retrieveFromVectorDB(message, 4);
 
-    // 2. Call LLM with context
-    const reply = await callLLM(message, searchResults);
+    // 3️⃣ Build prompt (system + context + user)
+    let contextText = passages
+      .map((p, i) => `Passage ${i + 1}: ${p.text || "[no text]"}`)
+      .join("\n---\n");
 
-    // 3. Store assistant reply in Redis
-    await redisClient.rpush(`session:${sessionId}:history`, JSON.stringify({ role: "assistant", text: reply }));
+    if (!contextText) {
+      contextText = "[NO RETRIEVED PASSAGES - database might be empty]";
+    }
 
-    // 4. Return response
-    res.json({ reply });
+    const fullPrompt = `${SYSTEM_PROMPT}
+
+Context:
+${contextText}
+
+User Question:
+${message}`;
+
+    // 4️⃣ Call Gemini
+    const reply = await callLLM(fullPrompt);
+
+    // 5️⃣ Store assistant reply in Redis
+    await appendMessage(sessionId, "assistant", reply);
+
+    // 6️⃣ Return response
+    res.json({ reply, context: passages });
   } catch (err) {
-    console.error("Error in /chat:", err);
+    console.error("❌ /chat error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
