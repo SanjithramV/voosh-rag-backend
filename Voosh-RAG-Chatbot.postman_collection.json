@@ -1,0 +1,70 @@
+{
+  "info": {
+    "name": "Voosh RAG Chatbot",
+    "_postman_id": "12345678-abcd-efgh-ijkl-1234567890ab",
+    "description": "Postman collection for testing Voosh RAG Chatbot Backend",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{BACKEND_URL}}/"
+      }
+    },
+    {
+      "name": "Create New Session",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{BACKEND_URL}}/session/new"
+      }
+    },
+    {
+      "name": "Chat",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"message\": \"What is the latest news on AI?\"\n}"
+        },
+        "url": "{{BACKEND_URL}}/chat"
+      }
+    },
+    {
+      "name": "Get History",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{BACKEND_URL}}/session/{{sessionId}}/history"
+      }
+    },
+    {
+      "name": "Reset Session",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": "{{BACKEND_URL}}/session/{{sessionId}}/reset"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "BACKEND_URL",
+      "value": "https://voosh-rag-backend.onrender.com"
+    },
+    {
+      "key": "sessionId",
+      "value": "1234-test-session"
+    }
+  ]
+}
