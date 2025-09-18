@@ -1,113 +1,108 @@
-RAG-Powered News Chatbot – Backend
+# RAG-Powered Chatbot Backend (Voosh Assignment)
 
-This is the backend service for the Voosh Full Stack Developer assignment.
-It powers a Retrieval-Augmented Generation (RAG) chatbot that answers questions over a news corpus.
+Backend service for a RAG (Retrieval-Augmented Generation) powered chatbot that answers queries over news articles.
 
-RAG Pipeline: Retrieve top-k passages, call Gemini	Vector embeddings stored in Qdrant, retrieved by query, LLM call to Gemini/OpenAI
-Backend: Node.js (Express) REST API	Implemented in server.js
-Session Storage: In-memory DB (Redis)	Redis stores per-session chat history, TTL configurable
-Session APIs: New session, history, reset	Endpoints: /session/new, /session/:id/history, /session/:id/reset
-Chat API: Query + RAG	Endpoint: /chat
-Optional DB for transcripts	Redis used for transcripts; easy to extend to Postgres/MySQL
-Caching & TTL	Redis keys auto-expire (default 7 days)
-Tech Stack	Node.js, Express, Redis, Qdrant, Axios, Gemini/OpenAI
-Deployment	Ready for Render deployment
-🏗 Architecture
-User -> Frontend (React)
-       -> Backend (Node/Express)
-             -> Redis (chat history)
-             -> Qdrant (vector store)
-             -> Gemini/OpenAI (LLM)
+## 🚀 Features
+- Ingests ~50 news articles into **Qdrant Cloud (via API)**
+- Embeds text using **Jina embeddings**
+- Retrieves top-k documents per query from Qdrant
+- Calls **Google Gemini API** for final answers
+- Session management with Redis (chat history per session)
+- REST API endpoints for chat, history, reset, and new session
+- Deployed on **Render**
 
-⚙️ Setup Instructions
-1. Environment Variables
+## 🛠️ Tech Stack
+- **Backend:** Node.js + Express
+- **Embeddings:** Jina AI Embeddings
+- **Vector DB:** Qdrant Cloud (API client)
+- **LLM:** Google Gemini API
+- **Cache & Sessions:** Redis (Render free tier)
+- **Deployment:** Render.com
 
-Create a .env in backend/:
+## 📂 Project Structure
+backend/
+├── server.js # Main server entrypoint
+├── package.json
+└── README.md
 
-PORT=4000
+bash
+Copy code
 
-# Redis (for session history)
-REDIS_URL=redis://<your_redis_instance>:6379
-
-# Qdrant (for vector retrieval)
-QDRANT_URL=http://<your_qdrant_instance>:6333
-QDRANT_COLLECTION=news_articles
-
-# LLM Keys (use at least one)
-GEMINI_API_KEY=your_gemini_api_key
-OPENAI_API_KEY=your_openai_api_key
-
-
-Redis keys expire after 7 days to satisfy caching and TTL requirements.
-
-2. Local Development
+## ⚡ Setup (Local Development)
+```bash
+git clone <backend-repo-url>
 cd backend
 npm install
-npm run dev   # Development with nodemon
-# or
-npm start     # Production mode
+npm run dev
+🔑 Environment Variables
+Create a .env file:
 
+# Redis
+REDIS_URL=rediss://<your-render-redis-url>
 
-API runs at http://localhost:4000.
-
-3. Endpoints
-Method	Endpoint	Purpose
-POST	/session/new	Create a new chat session (returns sessionId)
-GET	/session/:id/history	Fetch full chat history for a session
-POST	/session/:id/reset	Clear session history
-POST	/chat	RAG query: retrieve top-k from Qdrant and call LLM
-4. Deployment (Render Example)
-
-Push to GitHub
-Ensure .gitignore excludes:
-
-node_modules/
-.env
-venv/
-
-
-Create a Web Service on Render
-
-Root directory: backend
-
-Build command: npm install
-
-Start command: npm start
-
-Environment: Node 18+
-
-Add Environment Variables:
-
-PORT=4000
-REDIS_URL=...
-QDRANT_URL=...
+# Qdrant
+QDRANT_URL=https://<your-qdrant-instance>.api.qdrant.com
+QDRANT_API_KEY=<your-qdrant-api-key>
 QDRANT_COLLECTION=news_articles
-GEMINI_API_KEY=...
-OPENAI_API_KEY=...
 
+# Jina embeddings
+JINA_API_KEY=<your-jina-api-key>
 
-Use a managed Redis (Upstash/Render Redis) and Qdrant Cloud instance.
+# Gemini API
+GEMINI_API_KEY=<your-gemini-api-key>
 
-🧩 Tech Stack
+# Retrieval
+TOP_K=4
+📌 API Endpoints
+Root
+GET / → Health check (returns a running message)
 
-Backend: Node.js (Express)
+Session
+POST /session/new → Creates new session, returns sessionId
 
-Vector DB: Qdrant (cloud or Docker)
+GET /session/:id/history → Fetches chat history for session
 
-Embeddings: Sentence Transformers / Jina (ingestion handled separately)
+POST /session/:id/reset → Clears session history
 
-LLM: Google Gemini API (preferred) or OpenAI as fallback
+Chat
+POST /chat
 
-Caching & Sessions: Redis (7-day TTL)
+Body:
 
-🔑 Deliverables Checklist (Backend)
+json
+Copy code
+{
+  "sessionId": "uuid-here",
+  "message": "What is the latest news on AI?"
+}
+Response:
 
- Node.js REST API
+json
+Copy code
+{
+  "reply": "Gemini generated answer...",
+  "context": [
+    { "score": 0.85, "text": "News snippet...", "title": "Title", "url": "https://..." }
+  ]
+}
+🧪 Testing with Postman
+Create new session
+POST /session/new → returns { "sessionId": "<uuid>" }
 
- Session management with Redis
+Send chat query
+POST /chat with body:
 
- Chat endpoint retrieving from Qdrant & calling Gemini/OpenAI
+json
+Copy code
+{ "sessionId": "<uuid>", "message": "Summarize today's news" }
+View history
+GET /session/<uuid>/history
 
- Environment variable driven configuration
+Reset session
+POST /session/<uuid>/reset
 
- Ready for cloud deployment (Render)
+Deployment
+
+Hosted backend: https://voosh-rag-backend.onrender.com/
+
+Connects to Qdrant Cloud & Redis
