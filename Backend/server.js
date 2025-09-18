@@ -52,6 +52,9 @@ async function resetHistory(sessionId) {
 }
 
 // --- Session routes ---
+app.get("/", (req, res) => {
+  res.send("🚀 RAG Chatbot Backend is running successfully!");
+});
 app.post("/session/new", async (req, res) => {
   const sessionId = uuidv4();
   await appendMessage(sessionId, "system", "New session created");
@@ -67,6 +70,7 @@ app.post("/session/:id/reset", async (req, res) => {
 });
 
 // --- Jina embeddings ---
+
 async function createEmbeddingJina(text) {
   try {
     const JINA_KEY = process.env.JINA_API_KEY;
