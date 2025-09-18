@@ -216,32 +216,50 @@ async function callLLM(prompt) {
 app.post("/chat", async (req, res) => {
   try {
     const { sessionId, message } = req.body;
-    if (!sessionId || !message)
-      return res.status(400).json({ error: "sessionId and message required" });
+    if (!sessionId || !message) {
+      return res.status(400).json({ error: "Missing sessionId or message" });
+    }
 
-    await appendMessage(sessionId, "user", message);
+    // Store user message in Redis
+    await redisClient.rpush(
+      `session:${sessionId}:history`,
+      JSON.stringify({ role: "user", text: message })
+    );
 
-    // 1. Retrieve passages
-    const topK = parseInt(process.env.TOP_K || "4");
-    const passages = await retrieveFromVectorDB(message, topK);
+    // 1. Retrieve relevant docs from Qdrant
+    const searchResults = await retrieveFromVectorDB(message);
 
-    // 2. Build prompt with system instructions
-    let contextText = passages.map((p, i) => `Passage ${i + 1}: ${p.text || p}`).join("\n---\n");
-    if (!contextText)
-      contextText = "[NO RETRIEVED PASSAGES - run ingest script to populate Qdrant Cloud]";
+    // 2. Call LLM with context
+    const reply = await callLLM(message, searchResults);
 
-    const fullPrompt = `${SYSTEM_PROMPT}\n\nContext:\n${contextText}\n\nUser question:\n${message}`;
+    // 3. Store assistant reply in Redis
+    await redisClient.rpush(
+      `session:${sessionId}:history`,
+      JSON.stringify({ role: "assistant", text: reply })
+    );
 
-    // 3. Call Gemini
-    const reply = await callLLM(fullPrompt);
+    // 4. Extract sources from Qdrant payloads
+    let sources = [];
+    if (searchResults && searchResults.length > 0) {
+      sources = searchResults.map((hit) => {
+        const payload = hit.payload || {};
+        return {
+          title: payload.title || "Untitled",
+          url: payload.url || "",
+          snippet:
+            payload.snippet ||
+            (payload.text ? payload.text.slice(0, 150) : "")
+        };
+      });
+    }
 
-    // 4. Save + return
-    await appendMessage(sessionId, "assistant", reply);
-    res.json({ reply, context: passages });
+    // 5. Return both reply and sources
+    res.json({ reply, sources });
   } catch (err) {
-    console.error("❌ /chat error:", err);
-    res.status(500).json({ error: String(err) });
+    console.error("Error in /chat:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 app.listen(PORT, () => console.log(`🚀 Voosh RAG backend listening on ${PORT}`));
