@@ -221,10 +221,7 @@ app.post("/chat", async (req, res) => {
     }
 
     // Store user message in Redis
-    await redisClient.rpush(
-      `session:${sessionId}:history`,
-      JSON.stringify({ role: "user", text: message })
-    );
+    await redisClient.rpush(`session:${sessionId}:history`, JSON.stringify({ role: "user", text: message }));
 
     // 1. Retrieve relevant docs from Qdrant
     const searchResults = await retrieveFromVectorDB(message);
@@ -233,33 +230,16 @@ app.post("/chat", async (req, res) => {
     const reply = await callLLM(message, searchResults);
 
     // 3. Store assistant reply in Redis
-    await redisClient.rpush(
-      `session:${sessionId}:history`,
-      JSON.stringify({ role: "assistant", text: reply })
-    );
+    await redisClient.rpush(`session:${sessionId}:history`, JSON.stringify({ role: "assistant", text: reply }));
 
-    // 4. Extract sources from Qdrant payloads
-    let sources = [];
-    if (searchResults && searchResults.length > 0) {
-      sources = searchResults.map((hit) => {
-        const payload = hit.payload || {};
-        return {
-          title: payload.title || "Untitled",
-          url: payload.url || "",
-          snippet:
-            payload.snippet ||
-            (payload.text ? payload.text.slice(0, 150) : "")
-        };
-      });
-    }
-
-    // 5. Return both reply and sources
-    res.json({ reply, sources });
+    // 4. Return response
+    res.json({ reply });
   } catch (err) {
     console.error("Error in /chat:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 app.listen(PORT, () => console.log(`🚀 Voosh RAG backend listening on ${PORT}`));
