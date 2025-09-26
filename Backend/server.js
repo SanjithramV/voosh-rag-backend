@@ -196,7 +196,7 @@ async function callLLM(prompt) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return "❌ GEMINI_API_KEY not set in backend env";
 
-const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${key}`;
+const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${key}`;
 
   try {
     const res = await axios.post(
