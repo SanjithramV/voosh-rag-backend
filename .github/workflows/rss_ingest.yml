@@ -3,7 +3,7 @@ name: 📰 Daily RSS → Qdrant Ingestion
 on:
   schedule:
     - cron: "0 0 * * *"  # runs daily at midnight UTC
-  workflow_dispatch:     # lets you trigger it manually too
+  workflow_dispatch:     # allows manual trigger from GitHub UI
 
 jobs:
   ingest:
@@ -23,10 +23,11 @@ jobs:
           pip install -r ingest/requirements.txt || pip install feedparser requests qdrant-client python-dotenv
 
       - name: Run ingestion script
-        env:
-          QDRANT_URL: ${{ secrets.QDRANT_URL }}
-          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
-          QDRANT_COLLECTION: news_articles
-          JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
         run: |
+          echo "🔧 Exporting environment variables..."
+          export QDRANT_URL="${{ secrets.QDRANT_URL }}"
+          export QDRANT_API_KEY="${{ secrets.QDRANT_API_KEY }}"
+          export QDRANT_COLLECTION="news_articles"
+          export JINA_API_KEY="${{ secrets.JINA_API_KEY }}"
+          echo "Running Python ingestion script..."
           python ingest/fetch_rss_and_upsert.py
